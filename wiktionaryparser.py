@@ -4,6 +4,8 @@ from bs4 import BeautifulSoup
 from itertools import zip_longest
 from copy import copy
 from string import digits
+import hashlib
+from pathlib import Path
 
 PARTS_OF_SPEECH = [
     "noun", "verb", "adjective", "adverb", "determiner",
@@ -19,9 +21,22 @@ RELATIONS = [
     "coordinate terms",
 ]
 
+def get_hash(name):
+    md5 = hashlib.new('md5')
+    md5.update(name.encode('utf8'))
+    return md5.hexdigest()[:8]
+    
+def get_path(title):
+    out1 = Path(get_hash(title[:1]))
+    out2 = Path(get_hash(title[:2]))
+    out3 = Path(get_hash(title[:3]))
+    path = out1 / out2 / out3
+    return path
+
 class WiktionaryParser(object):
     def __init__(self):
-        self.url = "https://en.wiktionary.org/wiki/{}?printable=yes"
+        # self.url = "https://en.wiktionary.org/wiki/{}?printable=yes"
+        self.url = "http://localhost:8070/mediawiki/index.php/{}?printable=yes"
         self.soup = None
         self.session = requests.Session()
         self.session.mount("http://", requests.adapters.HTTPAdapter(max_retries = 2))
@@ -251,10 +266,21 @@ class WiktionaryParser(object):
             json_obj_list.append(data_obj.to_json())
         return json_obj_list
 
-    def fetch(self, word, language=None, old_id=None):
+    def fetch(self, word, language=None, old_id=None, cache_dir='/data/rsg/nlp/j_luo/wiki/wiktionary/htmls/'):
         language = self.language if not language else language
-        response = self.session.get(self.url.format(word), params={'oldid': old_id})
-        self.soup = BeautifulSoup(response.text.replace('>\n<', '><'), 'html.parser')
+        # Try to see if the website is cached first
+        path = cache_dir / get_path(word) / f'{word}.html'
+        try:
+            with path.open(mode='r', encoding='utf8') as fin:
+                response_text = fin.read()
+        except FileNotFoundError:
+            response = self.session.get(self.url.format(word), params={'oldid': old_id})
+            response_text = response.text
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open(mode='w', encoding='utf8') as fout:
+                fout.write(response_text)
+            
+        self.soup = BeautifulSoup(response_text.replace('>\n<', '><'), 'html.parser')
         self.current_word = word
         self.clean_html()
         return self.get_word_data(language.lower())
