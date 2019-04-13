@@ -276,10 +276,10 @@ class WiktionaryParser(object):
             json_obj_list.append(data_obj.to_json())
         return json_obj_list
 
-    def fetch(self, word, language=None, old_id=None, cache_dir='/data/rsg/nlp/j_luo/wiki/wiktionary/htmls/'):
+    def fetch(self, word, language=None, old_id=None, cache_dir='/data/rsg/nlp/j_luo/wiki/wiktionary'):
         language = self.language if not language else language
-        path = cache_dir / get_path(word) / f'{word}.html'
-        json_path = cache_dir / get_path(word) / f'{word}.json'
+        path = cache_dir / 'htmls' / get_path(word) / f'{word}.html'
+        json_path = cache_dir / 'jsons' /get_path(word) / f'{word}.json'
         try: # Use cached json if it exists.
             with json_path.open(mode='r', encoding='utf8') as fin:
                 return json.open(fin)
@@ -300,7 +300,10 @@ class WiktionaryParser(object):
         self.current_word = word
         self.clean_html()
         try:
-            return self.get_word_data(language.lower())
+            ret = self.get_word_data(language.lower())
+            with json_path.open(mode='w', encoding='utf8') as fout:
+                json.dump(ret, fout)
+            return ret
         except:
             print(word)
             raise Exception
