@@ -6,6 +6,7 @@ from copy import copy
 from string import digits
 import hashlib
 from pathlib import Path
+import json
 
 PARTS_OF_SPEECH = [
     "noun", "verb", "adjective", "adverb", "determiner",
@@ -194,6 +195,8 @@ class WiktionaryParser(object):
             table = span_tag.parent
             while table.name != 'ol':
                 table = table.find_next_sibling()
+                if table is None: # HACK For "non-transposing"
+                    break
             examples = []
             while table and table.name == 'ol':
                 for element in table.find_all('dd'):
@@ -223,6 +226,8 @@ class WiktionaryParser(object):
                 else:
                     for list_tag in etymology_tag.find_all('li'):
                         etymology_text += list_tag.text + '\n'
+                if next_tag is None: # HACK For "doon"
+                    break
             etymology_list.append((etymology_index, etymology_text))
         return etymology_list
 
@@ -235,8 +240,13 @@ class WiktionaryParser(object):
             parent_tag = span_tag.parent
             while not parent_tag.find_all('li'):
                 parent_tag = parent_tag.find_next_sibling()
+                if parent_tag is None: # HACK For "neurophenomenology"
+                    break
+            if parent_tag is None:
+                continue
             for list_tag in parent_tag.find_all('li'):
                 words.append(list_tag.text)
+              
             related_words_list.append((related_index, words, relation_type))
         return related_words_list
 
@@ -268,9 +278,15 @@ class WiktionaryParser(object):
 
     def fetch(self, word, language=None, old_id=None, cache_dir='/data/rsg/nlp/j_luo/wiki/wiktionary/htmls/'):
         language = self.language if not language else language
-        # Try to see if the website is cached first
         path = cache_dir / get_path(word) / f'{word}.html'
-        try:
+        json_path = cache_dir / get_path(word) / f'{word}.json'
+        try: # Use cached json if it exists.
+            with json_path.open(mode='r', encoding='utf8') as fin:
+                return json.open(fin)
+        except FileNotFoundError:
+            pass
+
+        try: # Use cached html if possible.
             with path.open(mode='r', encoding='utf8') as fin:
                 response_text = fin.read()
         except FileNotFoundError:
@@ -283,4 +299,8 @@ class WiktionaryParser(object):
         self.soup = BeautifulSoup(response_text.replace('>\n<', '><'), 'html.parser')
         self.current_word = word
         self.clean_html()
-        return self.get_word_data(language.lower())
+        try:
+            return self.get_word_data(language.lower())
+        except:
+            print(word)
+            raise Exception
